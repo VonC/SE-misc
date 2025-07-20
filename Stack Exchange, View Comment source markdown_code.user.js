@@ -23,20 +23,29 @@
 // @version     1.1.1
 // @history     1.1.1 Updated to fetch commentId from data-follow-up-id or id attribute
 // @history     1.1 Added auto resizing and control to textarea. Slight tweaks.
-// @history     1.0 Initial write.
-// ==/UserScript==
+// @history     1.0 Initial write, in response to https://meta.stackoverflow.com/q/382478/331508
+// @author      Brock Adams
+// @homepage    https://stackapps.com/q/8296/7653
+// @supportURL  https://github.com/BrockA/SE-misc/blob/master/Stack%20Exchange%2C%20View%20Comment%20source%20markdown_code.user.js
 /* global $, waitForKeyElements, StackExchange */
-const seApiBaseUrl = "https://api.stackexchange.com/2.3/";
-const tm_msgOptions = { position: { at: "top center", my: "bottom center" }, type: 'info', transient: false };
+/* eslint-disable no-multi-spaces, curly */
+// ==/UserScript==
+
+const seApiBaseUrl   = "https://api.stackexchange.com/2.3/";
+const scrtPrefix     = "SE VCM script:";
+const supportUrl     = GM_info.script.supportURL || GM_info.script.homepage || "not set!";
+const tm_msgOptions  = { position: { at: "top center", my: "bottom center" }, type: 'info', transient: false };
 var   gbl_LastCmmntId = 0;
 
-// Insert "Code" button into each comment body
 waitForKeyElements(".comment-body, .js-follow-up .js-comment-body", addMarkdownBttn);
+
 function addMarkdownBttn(jNode) {
-    jNode.append(`<button class="tmCCodeBtn s-btn s-btn__link" aria-label="Code"><span class="hover-only-label">Code</span></button>`);
+    //--  `<button class="js-comment-edit s-btn s-btn__link" aria-label="Edit"><span class="hover-only-label">Edit</span></button>`
+    jNode.append(
+        `<button class="tmCCodeBtn s-btn s-btn__link" aria-label="Code"><span class="hover-only-label">Code</span></button>`
+    );
 }
 
-// Handle click on "Code" button
 $("#content").on("click", ".tmCCodeBtn", zEvent => {
     const $btn = $(zEvent.currentTarget);
 
@@ -52,7 +61,7 @@ $("#content").on("click", ".tmCCodeBtn", zEvent => {
     }
 
     if (!commentId) {
-        console.error("Unable to determine commentId", commentNd);
+        console.error(`${scrtPrefix} Unable to determine commentId`, commentNd);
         return;
     }
 
@@ -75,16 +84,17 @@ function stopClickFromClosing(zEvent) {
 }
 
 function clipboardizeComment(zEvent) {
-    const txtArea = $(zEvent.target).prevAll(".tmCmmntCode");
+    var txtArea = $(zEvent.target).prevAll(".tmCmmntCode");
     GM_setClipboard(txtArea.val(), 'text');
 }
 
 function fetchCommentMarkdown(commentId) {
     gbl_LastCmmntId = commentId;
-    const reqURL = `${seApiBaseUrl}comments/${commentId}`
-                 + "?filter=*J74u4MrvgeNSF_WvbUk"
-                 + "&key=5CtZ)DaSoSCUwmIDR*c09Q(("
-                 + `&site=${location.host}`;
+
+    //-- Fetch comment markdown from API:
+    let reqURL  = seApiBaseUrl + "comments/" + commentId
+                + "?filter=*J74u4MrvgeNSF_WvbUk&key=5CtZ)DaSoSCUwmIDR*c09Q(("
+                + "&site=" + location.host;
     $.getJSON(reqURL, processCommentBody).fail((jqXHR, textStatus) => {
         reportError("API error: " + textStatus, "Detail: " + jqXHR.responseText);
     });
@@ -92,49 +102,82 @@ function fetchCommentMarkdown(commentId) {
 
 function processCommentBody(jsonRsp) {
     checkForRoutineAPI_Errors(jsonRsp);
-    let cmmntMarkDown = "Comment not found! (Likely API error)";
-    let commentId = gbl_LastCmmntId;
+    var cmmntMarkDown = "Comment not found! (Likely API error)";
+    var commentId     = gbl_LastCmmntId;
 
     if (jsonRsp.items && jsonRsp.items.length) {
-        cmmntMarkDown = jsonRsp.items[0].body_markdown || "API bug: Markdown not returned";
-        commentId = jsonRsp.items[0].comment_id || gbl_LastCmmntId;
+        cmmntMarkDown  = jsonRsp.items[0].body_markdown || "API bug: Markdown not returned";
+        commentId      = jsonRsp.items[0].comment_id || gbl_LastCmmntId;
     }
 
-    const textAreaJNd = $(`#tmCmmntCode-${commentId}`);
+    let textAreaJNd = $(`#tmCmmntCode-${commentId}`);
     textAreaJNd.val(cmmntMarkDown);
-    // auto-resize
-    const cntnrJNd = textAreaJNd.closest(".message");
-    const oldTop = cntnrJNd.offset().top;
-    const oldH = cntnrJNd.outerHeight();
-    const ta = textAreaJNd[0];
-    if (ta.scrollHeight > textAreaJNd.innerHeight()) {
-        ta.style.height = (ta.scrollHeight + 3) + "px";
-        cntnrJNd.offset({ top: oldTop - cntnrJNd.outerHeight() + oldH });
+
+    //-- Expand away scrollbar if needed:
+    let cntnrJNd  = textAreaJNd.closest(".message");
+    let oldTop    = cntnrJNd.offset().top;
+    let oldHeight = cntnrJNd.outerHeight();
+    let tA_Nd     = textAreaJNd[0];
+    if (tA_Nd.scrollHeight > textAreaJNd.innerHeight()) {
+        tA_Nd.style.height = (tA_Nd.scrollHeight + 3) + "px";
+        cntnrJNd.offset({ top: oldTop - cntnrJNd.outerHeight() + oldHeight });
     }
 }
 
 function checkForRoutineAPI_Errors(jsonRsp) {
-    if (jsonRsp.backoff) {
-        reportError(`API sent backoff warning, ${jsonRsp.backoff} seconds.`); }
-    if (jsonRsp.quota_remaining < 20) {
-        reportError(`API low quota alert. ${jsonRsp.quota_remaining} remaining.`); }
+    //-- Always check for (and ideally handle) these errors, esp backoff:
+    if (jsonRsp.backoff)
+        reportError(`API sent backoff warning, ${jsonRsp.backoff} seconds.`);
+    if (jsonRsp.quota_remaining < 20)
+        reportError(`API low quota alert. ${jsonRsp.quota_remaining} remaining.`);
     if (jsonRsp.error_id) {
-        reportError(`Error ${jsonRsp.error_id}, ${jsonRsp.error_name}.`, jsonRsp.error_message); }
+        reportError(
+            `Error ${jsonRsp.error_id}, ${jsonRsp.error_name}.`,
+            jsonRsp.error_message
+        );
+    }
 }
 
 GM_addStyle(`
     .tmCCodeBtn { margin-left: 1ex; }
-    .tmCmmntCode { min-width: 35em; min-height: 6em; resize: both; }
+    .tmCmmntCode { min-width: 35em;   min-height: 6em;   resize: both;}
 `);
 
 function reportError(errLine1, errLine2) {
-    console.error("SE VCM script: ", errLine1, errLine2 || "");
-    if (window.StackExchange?.notify?.show) {
+    console.error(`${scrtPrefix} `, errLine1);
+    if (errLine2) console.error(errLine2);
+    else errLine2 = "";
+
+    if (objHas(window, "StackExchange.notify.show")) {
+        if (errLine2) errLine2 = "<br>" + errLine2;
+
         StackExchange.notify.show(
-            `Error in SE VCM script.<br>${errLine1}${errLine2 ? "<br>"+errLine2 : ""}`,
+            `Error in ${GM_info.script.name} userscript.<br>
+             ${errLine1} ${errLine2} <br>
+             If the error persists, please report it at <a href="${supportUrl}">the support page</a>.`,
             13137713
         );
     } else {
-        alert(`Error in SE VCM script.\n${errLine1}\n${errLine2 || ""}`);
+        if (errLine2) errLine2 = "\n" + errLine2;
+        alert(
+            `Error in ${GM_info.script.name} userscript.\n` +
+            `${errLine1} ${errLine2}\n` +
+            `If the error persists, please report it at ${supportUrl}.`
+        );
     }
 }
+
+function objHas(obj, key) {
+    //-- Needed because .hasOwnProperty() does not work for nested properties. :(
+    return key.split(".").every(_rcrsvlyChkPropname);
+
+    function _rcrsvlyChkPropname(propName) {
+        if (obj === null || typeof obj !== "object" || !(propName in obj)) {
+            return false;
+        }
+        obj = obj[propName];
+        return true;
+    }
+}
+
+/*-------- EOF --------*/
