@@ -45,7 +45,6 @@ function addMarkdownBttn (jNode) {
         `<button class="tmCCodeBtn s-btn s-btn__link" aria-label="Code"><span class="hover-only-label">Code</span></button>`
     );
 }
-
 $("#content").on ("click", ".tmCCodeBtn", zEvent => {
     var commentNd   = $(zEvent.currentTarget).closest (".comment, .js-follow-up, [id^='comment-']");
     var commentId   = commentNd.attr ("data-follow-up-id") || commentNd.data ("commentId");
@@ -61,12 +60,11 @@ $("#content").on ("click", ".tmCCodeBtn", zEvent => {
     StackExchange.helpers.showMessage (
         zEvent.currentTarget,
         `<textarea class="tmCmmntCode" id="tmCmmntCode-${commentId}">Fetching data...</textarea>
-         <br><button class="tmCopyCmmntCode">to Clipboard</button>`,
+        <br><button class="tmCopyCmmntCode">to Clipboard</button>`,
         tm_msgOptions
     );
-    $(`#tmCmmntCode-${commentId}`).click (stopClickFromClosing);
-    $(`.tmCopyCmmntCode`).click (clipboardizeComment);
-
+    $(`#tmCmmntCode-${commentId}`).click (stopClickFromClosing);  //  Attach this way so can intercept a message's default click.
+    $(`.tmCopyCmmntCode`).click (clipboardizeComment);  // Catch click before default close.
     fetchCommentMarkdown (commentId);
 } );
 
@@ -86,7 +84,8 @@ function fetchCommentMarkdown (commentId) {
     //-- Fetch comment markdown from API:
     let reqURL  = seApiBaseUrl + "comments/" + commentId
                 + "?filter=*J74u4MrvgeNSF_WvbUk&key=5CtZ)DaSoSCUwmIDR*c09Q(("
-                + "&site=" + location.host;
+                + "&site=" + location.host
+                ;
     $.getJSON (reqURL, processCommentBody).fail ( (jqXHR, textStatus) => {
         reportError ("API error: " + textStatus, "Detail: " + jqXHR.responseText);
     } );
@@ -98,8 +97,8 @@ function processCommentBody (jsonRsp) {
     var commentId       = gbl_LastCmmntId;
 
     if (jsonRsp.items && jsonRsp.items.length) {
-        cmmntMarkDown       = jsonRsp.items[0].body_markdown  ||  "API bug: Markdown not returned";
-        commentId           = jsonRsp.items[0].comment_id     ||  gbl_LastCmmntId;
+        cmmntMarkDown   = jsonRsp.items[0].body_markdown  ||  "API bug: Markdown not returned";
+        commentId       = jsonRsp.items[0].comment_id  ||  gbl_LastCmmntId;
     }
 
     let textAreaJNd     = $(`#tmCmmntCode-${commentId}`);
@@ -145,7 +144,8 @@ function reportError (errLine1, errLine2) {
         StackExchange.notify.show (
             `Error in ${GM_info.script.name} userscript.<br>
              ${errLine1} ${errLine2} <br>
-             If the error persists, please report it at <a href="${supportUrl}">the support page</a>.`,
+             If the error persists, please report it at <a href="${supportUrl}">the support page</a>.
+            `,
             13137713 //-- Should be unique-ish number
         );
     }
